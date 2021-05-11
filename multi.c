@@ -7,6 +7,9 @@
 #endif
 
 
+static int connection_mask;
+
+
 static int multiplayer_is_master()
 {
     return (REG_SIOCNT & (1 << 2)) == 0;
@@ -35,6 +38,35 @@ static multi_DataCallback g_data_callback = NULL;
 volatile int sio_got_intr = 0;
 
 
+static void multi_record_id()
+{
+    // NOTE: it's only safe to read the multiplayer id immediatly after a
+    // transmission, otherwise, the register might contain a garbage value.
+
+    switch ((REG_SIOCNT & (0x30)) >> 4) {
+    case 0:
+        g_multi_id = multi_PlayerId_host;
+        break;
+
+    case 1:
+        g_multi_id = multi_PlayerId_p1;
+        break;
+
+    case 2:
+        g_multi_id = multi_PlayerId_p2;
+        break;
+
+    case 3:
+        g_multi_id = multi_PlayerId_p3;
+        break;
+
+    default:
+        g_multi_id = multi_PlayerId_unknown;
+        break;
+    }
+}
+
+
 // This is just some boilerplate code for waiting on a serial interrupt, used
 // while initializing the connection. We want to wait until the transmission is
 // complete before reading serial registers.
@@ -42,9 +74,7 @@ static void multi_connect_serial_isr()
 {
     sio_got_intr = 1;
 
-    // NOTE: it's only safe to read the multiplayer id immediatly after a
-    // transmission, otherwise, the register might contain a garbage value.
-    g_multi_id = (REG_SIOCNT & (0x30)) >> 4;
+    multi_record_id();
 }
 
 
@@ -97,9 +127,6 @@ static void __attribute__((noinline)) busy_wait(unsigned max)
 
 
 static void multi_serial_init();
-
-
-static multi_PlayerId connection_mask;
 
 
 multi_PlayerId multi_connection_set()
@@ -187,6 +214,11 @@ static void multi_master_timer_isr()
 
 static void multi_serial_master_init_timer()
 {
+    // These times must be carefully calibrated. If you set the time too small,
+    // you risk starting a transmission before the previous transmission
+    // finished. I am using these same timer values in Blind Jump, an open
+    // source gba game. I think pokemon uses similar values. You can try to
+    // increase the frequency of the transmissions, but do so at your own risk.
     REG_TM2CNT_H = 0x00C1;
     REG_TM2CNT_L = 65000;
 
@@ -197,12 +229,18 @@ static void multi_serial_master_init_timer()
 
 static void multi_schedule_master_tx()
 {
+    // We cannot transmit right away, we need to wait for the signal to
+    // propagate through the rest of the devices. If the master transmits too
+    // soon, then it will blow mess up the current transmission. So instead,
+    // we're using a timer interrupt to schedule the next transmission.
     multi_serial_master_init_timer();
 }
 
 
 static void multi_serial_isr()
 {
+    multi_record_id();
+
     g_data_callback(REG_SIOMULTI0,
                     REG_SIOMULTI1,
                     REG_SIOMULTI2,

@@ -114,25 +114,34 @@ void init_sprite_graphics()
 
     oam_init(obj_buffer, 128);
 
-    obj_set_attr(&obj_buffer[0],
-                 ATTR0_SQUARE,
-                 ATTR1_SIZE_32,
-                 ATTR2_PALBANK(0) | 0);
+    // Init objects if they devices were detected by multi_connect()
+    if (multi_connection_set() & multi_PlayerId_host) {
+        obj_set_attr(&obj_buffer[0],
+                     ATTR0_SQUARE,
+                     ATTR1_SIZE_32,
+                     ATTR2_PALBANK(0) | 0);
+    }
 
-    obj_set_attr(&obj_buffer[1],
-                 ATTR0_SQUARE,
-                 ATTR1_SIZE_32,
-                 ATTR2_PALBANK(1) | 0);
+    if (multi_connection_set() & multi_PlayerId_p1) {
+        obj_set_attr(&obj_buffer[1],
+                     ATTR0_SQUARE,
+                     ATTR1_SIZE_32,
+                     ATTR2_PALBANK(1) | 0);
+    }
 
-    obj_set_attr(&obj_buffer[2],
-                 ATTR0_SQUARE,
-                 ATTR1_SIZE_32,
-                 ATTR2_PALBANK(2) | 0);
+    if (multi_connection_set() & multi_PlayerId_p2) {
+        obj_set_attr(&obj_buffer[2],
+                     ATTR0_SQUARE,
+                     ATTR1_SIZE_32,
+                     ATTR2_PALBANK(2) | 0);
+    }
 
-    obj_set_attr(&obj_buffer[3],
-                 ATTR0_SQUARE,
-                 ATTR1_SIZE_32,
-                 ATTR2_PALBANK(3) | 0);
+    if (multi_connection_set() & multi_PlayerId_p3) {
+        obj_set_attr(&obj_buffer[3],
+                     ATTR0_SQUARE,
+                     ATTR1_SIZE_32,
+                     ATTR2_PALBANK(3) | 0);
+    }
 }
 
 
@@ -159,19 +168,49 @@ int main()
                                                 multi_host_callback,
                                                 multi_data_function);
 
+
     if (connect_result == multi_Status_failure) {
         return 1;
     }
+
+
+    switch (multi_id()) {
+    case multi_PlayerId_host:
+        tte_write("I'm the host");
+        break;
+
+    case multi_PlayerId_p1:
+        tte_write("I'm p1");
+        break;
+
+    case multi_PlayerId_p2:
+        tte_write("I'm p2");
+        break;
+
+    case multi_PlayerId_p3:
+        tte_write("I'm p3");
+        break;
+
+    default:
+        tte_write("hmm...");
+    }
+
+
+    // Wait a bit before clearing the screen, not really necessary
+    for (int i = 0; i < 200; ++i) {
+        VBlankIntrWait();
+    }
+
 
     tte_erase_screen();
 
     init_sprite_graphics();
 
     while (true) {
-        if (~(*keys) & KEY_DOWN) {
+        if (~(*keys) & KEY_LEFT) {
             my_counter -= 1;
         }
-        if (~(*keys) & KEY_UP) {
+        if (~(*keys) & KEY_RIGHT) {
             my_counter += 1;
         }
 
