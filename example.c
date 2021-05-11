@@ -64,6 +64,12 @@ int main()
     text_put("multiplayer test...\n");
 
 
+    static volatile unsigned int* keys = (volatile unsigned int*)0x04000130;
+
+    while (!(~(*keys) & 1)) { // wait for player to press A button
+        // ...
+    }
+
     multi_Status connect_result = multi_connect(multi_connect_callback);
 
     if (connect_result == multi_Status_failure) {

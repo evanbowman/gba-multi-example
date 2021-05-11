@@ -14,13 +14,35 @@ enum {
 };
 
 
+static int multi_validate_modes()
+{
+    return REG_SIOCNT & (1 << 3);
+}
+
+
+int multi_done = 0;
+
+
+static void multiplayer_serial_isr()
+{
+
+}
+
+#include </opt/devkitpro/libtonc/include/tonc_irq.h>
+
 multi_Status multi_connect(multi_ConnectedCallback callback)
 {
     REG_RCNT = R_MULTI;
     REG_SIOCNT = SIO_MULTI;
     REG_SIOCNT |= SIO_IRQ | SIO_115200;
 
+    irq_add(II_VBLANK, multiplayer_serial_isr);
+
     int connection_mask = 0;
+
+    while (!multi_validate_modes()) {
+        // ...
+    }
 
     if (multiplayer_is_master()) {
         while (1) {
@@ -59,11 +81,6 @@ multi_Status multi_connect(multi_ConnectedCallback callback)
         REG_SIOMLT_SEND = MULTI_DEVICE_READY;
 
         while (1) {
-            if (REG_SIOMULTI0 == MULTI_DEVICE_START) {
-                // The master says that we're done establishing the connection.
-                break;
-            }
-
             REG_SIOMLT_SEND = MULTI_DEVICE_READY;
 
             for (int i = 0; i < 20000; ++i) {
@@ -72,21 +89,25 @@ multi_Status multi_connect(multi_ConnectedCallback callback)
 
             if (REG_SIOMULTI0 == MULTI_DEVICE_READY &&
                 !(connection_mask & multi_PlayerId_host)) {
+                connection_mask |= multi_PlayerId_host;
                 callback(multi_PlayerId_host);
             }
 
             if (REG_SIOMULTI1 == MULTI_DEVICE_READY &&
                 !(connection_mask & multi_PlayerId_p1)) {
+                connection_mask |= multi_PlayerId_p1;
                 callback(multi_PlayerId_p1);
             }
 
             if (REG_SIOMULTI2 == MULTI_DEVICE_READY &&
                 !(connection_mask & multi_PlayerId_p2)) {
+                connection_mask |= multi_PlayerId_p2;
                 callback(multi_PlayerId_p2);
             }
 
             if (REG_SIOMULTI3 == MULTI_DEVICE_READY &&
                 !(connection_mask & multi_PlayerId_p3)) {
+                connection_mask |= multi_PlayerId_p3;
                 callback(multi_PlayerId_p3);
             }
         }
