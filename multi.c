@@ -1,5 +1,6 @@
 #include "multi.h"
 #include "gba.h"
+#include </opt/devkitpro/libtonc/include/tonc_irq.h>
 
 
 static int multiplayer_is_master()
@@ -23,6 +24,15 @@ static int multi_validate_modes()
 int multi_done = 0;
 
 
+volatile int sio_got_intr = 0;
+
+
+static void multi_connect_serial_isr()
+{
+    sio_got_intr = 1;
+}
+
+
 static void multi_connect_check_device_ready(int* connection_mask,
                                              u16 state,
                                              multi_PlayerId device_id,
@@ -32,7 +42,8 @@ static void multi_connect_check_device_ready(int* connection_mask,
         !(*connection_mask & device_id)) {
         *connection_mask |= device_id;
         callback(device_id, 1);
-    } else if (*connection_mask & device_id) {
+    } else if (state != MULTI_DEVICE_READY &&
+               *connection_mask & device_id) {
         *connection_mask &= ~device_id;
         callback(device_id, 0);
     }
@@ -70,6 +81,8 @@ multi_Status multi_connect(multi_ConnectedCallback callback)
     REG_SIOCNT = SIO_MULTI;
     REG_SIOCNT |= SIO_IRQ | SIO_115200;
 
+    irq_add(II_SERIAL, multi_connect_serial_isr);
+
     int connection_mask = 0;
 
     while (!multi_validate_modes()) {
@@ -93,9 +106,8 @@ multi_Status multi_connect(multi_ConnectedCallback callback)
         while (1) {
             REG_SIOMLT_SEND = MULTI_DEVICE_READY;
 
-            for (int i = 0; i < 20000; ++i) {
-                // FIXME... busy wait for now
-            }
+            while (!sio_got_intr) ; // Wait for serial interrupt.
+            sio_got_intr = 0;
 
             multi_connect_check_devices(&connection_mask, callback);
         }
