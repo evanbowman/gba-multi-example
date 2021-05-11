@@ -28,13 +28,13 @@ typedef enum {
 } multi_PlayerId;
 
 
-typedef void (*multi_ConnectedCallback)(multi_PlayerId);
+typedef void (*multi_ConnectedCallback)(multi_PlayerId, int);
 typedef int (*multi_ConnectionUpdateCallback)();
 
 
 // A Blocking call, but invokes a callback as each other player
-// connects. multi_connect will call the device connected callback repeatedly
-// for each connected gba device.
+// connects. multi_connect will call the device connected callback for each
+// connected gba device.
 multi_Status multi_connect(multi_ConnectedCallback device_connected);
 
 

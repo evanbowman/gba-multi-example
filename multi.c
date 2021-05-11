@@ -23,12 +23,46 @@ static int multi_validate_modes()
 int multi_done = 0;
 
 
-static void multiplayer_serial_isr()
+static void multi_connect_check_device_ready(int* connection_mask,
+                                             u16 state,
+                                             multi_PlayerId device_id,
+                                             multi_ConnectedCallback callback)
 {
-
+    if (state == MULTI_DEVICE_READY &&
+        !(*connection_mask & device_id)) {
+        *connection_mask |= device_id;
+        callback(device_id, 1);
+    } else if (*connection_mask & device_id) {
+        *connection_mask &= ~device_id;
+        callback(device_id, 0);
+    }
 }
 
-#include </opt/devkitpro/libtonc/include/tonc_irq.h>
+
+static void multi_connect_check_devices(int* connection_mask,
+                                        multi_ConnectedCallback callback)
+{
+    multi_connect_check_device_ready(connection_mask,
+                                     REG_SIOMULTI0,
+                                     multi_PlayerId_host,
+                                     callback);
+
+    multi_connect_check_device_ready(connection_mask,
+                                     REG_SIOMULTI1,
+                                     multi_PlayerId_p1,
+                                     callback);
+
+    multi_connect_check_device_ready(connection_mask,
+                                     REG_SIOMULTI2,
+                                     multi_PlayerId_p2,
+                                     callback);
+
+    multi_connect_check_device_ready(connection_mask,
+                                     REG_SIOMULTI3,
+                                     multi_PlayerId_p3,
+                                     callback);
+}
+
 
 multi_Status multi_connect(multi_ConnectedCallback callback)
 {
@@ -36,12 +70,10 @@ multi_Status multi_connect(multi_ConnectedCallback callback)
     REG_SIOCNT = SIO_MULTI;
     REG_SIOCNT |= SIO_IRQ | SIO_115200;
 
-    irq_add(II_VBLANK, multiplayer_serial_isr);
-
     int connection_mask = 0;
 
     while (!multi_validate_modes()) {
-        // ...
+        // Wait until all gba consoles are in the proper serial device mode.
     }
 
     if (multiplayer_is_master()) {
@@ -51,31 +83,9 @@ multi_Status multi_connect(multi_ConnectedCallback callback)
 
             for (int i = 0; i < 20000; ++i) {
                 // FIXME... busy wait for now
-           }
-
-            if (!(connection_mask & multi_PlayerId_host)) {
-                connection_mask |= multi_PlayerId_host;
-                callback(multi_PlayerId_host);
             }
 
-            if (REG_SIOMULTI1 == MULTI_DEVICE_READY &&
-                !(connection_mask & multi_PlayerId_p1)) {
-                connection_mask |= multi_PlayerId_p1;
-                callback(multi_PlayerId_p1);
-            }
-
-            if (REG_SIOMULTI2 == MULTI_DEVICE_READY &&
-                !(connection_mask & multi_PlayerId_p2)) {
-                connection_mask |= multi_PlayerId_p2;
-                callback(multi_PlayerId_p2);
-            }
-
-            if (REG_SIOMULTI3 == MULTI_DEVICE_READY &&
-                !(connection_mask & multi_PlayerId_p3)) {
-                connection_mask |= multi_PlayerId_p3;
-                callback(multi_PlayerId_p3);
-            }
-
+            multi_connect_check_devices(&connection_mask, callback);
         }
     } else {
         REG_SIOMLT_SEND = MULTI_DEVICE_READY;
@@ -87,29 +97,7 @@ multi_Status multi_connect(multi_ConnectedCallback callback)
                 // FIXME... busy wait for now
             }
 
-            if (REG_SIOMULTI0 == MULTI_DEVICE_READY &&
-                !(connection_mask & multi_PlayerId_host)) {
-                connection_mask |= multi_PlayerId_host;
-                callback(multi_PlayerId_host);
-            }
-
-            if (REG_SIOMULTI1 == MULTI_DEVICE_READY &&
-                !(connection_mask & multi_PlayerId_p1)) {
-                connection_mask |= multi_PlayerId_p1;
-                callback(multi_PlayerId_p1);
-            }
-
-            if (REG_SIOMULTI2 == MULTI_DEVICE_READY &&
-                !(connection_mask & multi_PlayerId_p2)) {
-                connection_mask |= multi_PlayerId_p2;
-                callback(multi_PlayerId_p2);
-            }
-
-            if (REG_SIOMULTI3 == MULTI_DEVICE_READY &&
-                !(connection_mask & multi_PlayerId_p3)) {
-                connection_mask |= multi_PlayerId_p3;
-                callback(multi_PlayerId_p3);
-            }
+            multi_connect_check_devices(&connection_mask, callback);
         }
     }
 

@@ -32,23 +32,39 @@ static void text_put(const char* str)
 }
 
 
-static void multi_connect_callback(multi_PlayerId player_connected)
+static void multi_connect_callback(multi_PlayerId player, int connected)
 {
-    switch (player_connected) {
+    switch (player) {
     case multi_PlayerId_host:
-        text_put("host connected\n");
+        if (connected) {
+            text_put("host connected\n");
+        } else {
+            text_put("host disconnected\n");
+        }
         break;
 
     case multi_PlayerId_p1:
-        text_put("p1 connected\n");
+        if (connected) {
+            text_put("p1 connected\n");
+        } else {
+            text_put("p1 disconnected\n");
+        }
         break;
 
     case multi_PlayerId_p2:
-        text_put("p2 connected\n");
+        if (connected) {
+            text_put("p2 connected\n");
+        } else {
+            text_put("p2 disconnected\n");
+        }
         break;
 
     case multi_PlayerId_p3:
-        text_put("p3 connected\n");
+        if (connected) {
+            text_put("p3 connected\n");
+        } else {
+            text_put("p3 disconnected\n");
+        }
         break;
     }
 }
