@@ -4,6 +4,10 @@
 #include </opt/devkitpro/libtonc/include/tonc_irq.h>
 
 
+static volatile unsigned int* keys = (volatile unsigned int*)0x04000130;
+
+
+
 static void text_init()
 {
     REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
@@ -66,7 +70,25 @@ static void multi_connect_callback(multi_PlayerId player, int connected)
             text_put("p3 disconnected\n");
         }
         break;
+
+    case multi_PlayerId_unknown:
+        // This condition can't really happen anyway.
+        text_put("??? connected");
+        break;
     }
+}
+
+
+static int multi_host_callback()
+{
+    // If the host player presses the B button, then return true, thus
+    // indicating to the multi library that we're ready to establish a
+    // connection.
+    if ((~(*keys) & (1 << 1))) {
+        return 1;
+    }
+
+    return 0;
 }
 
 
@@ -79,16 +101,20 @@ int main()
 
     text_put("multiplayer test...\n");
 
-
-    static volatile unsigned int* keys = (volatile unsigned int*)0x04000130;
-
-    while (!(~(*keys) & 1)) { // wait for player to press A button
+    // Wait for player to press A button. We don't want to attempt to connect
+    // right away, before all players power on their gbas. If all gbas are not
+    // turned on when commencing a serial connection, stuff might not connect
+    // correctly.
+    while (!(~(*keys) & 1)) {
         // ...
     }
 
-    multi_Status connect_result = multi_connect(multi_connect_callback);
+    multi_Status connect_result = multi_connect(multi_connect_callback,
+                                                multi_host_callback);
 
     if (connect_result == multi_Status_failure) {
         return 1;
     }
+
+    text_put("ready! :)\n");
 }
