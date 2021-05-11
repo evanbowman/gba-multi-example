@@ -71,3 +71,7 @@ typedef unsigned short u16;
 #define REG_SIOMULTI3	*(volatile u16*)(REG_BASE + 0x126)	// Slave 3 data
 
 #define REG_RCNT		*(volatile u16*)(REG_BASE + 0x134)	// SIO Mode Select/General Purpose Data
+
+#define REG_TM2CNT *(volatile u32*)(0x04000000 + 0x108)
+#define REG_TM2CNT_L *(volatile u16*)(REG_BASE + 0x108)
+#define REG_TM2CNT_H *(volatile u16*)(REG_BASE + 0x10a)

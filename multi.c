@@ -1,6 +1,10 @@
 #include "multi.h"
 #include "gba.h"
-#include </opt/devkitpro/libtonc/include/tonc_irq.h>
+
+
+#ifndef NULL
+#define NULL 0
+#endif
 
 
 static int multiplayer_is_master()
@@ -25,6 +29,8 @@ enum {
 
 // Cache our device's multiplayer id.
 static multi_PlayerId g_multi_id = multi_PlayerId_unknown;
+static multi_DataCallback g_data_callback = NULL;
+
 
 volatile int sio_got_intr = 0;
 
@@ -93,32 +99,32 @@ static void __attribute__((noinline)) busy_wait(unsigned max)
 static void multi_serial_init();
 
 
-multi_Status multi_connect(multi_ConnectedCallback callback,
-                           multi_ConnectionHostCallback host_callback)
+static multi_PlayerId connection_mask;
+
+
+multi_PlayerId multi_connection_set()
 {
+    return connection_mask;
+}
+
+
+multi_Status multi_connect(multi_ConnectedCallback callback,
+                           multi_ConnectionHostCallback host_callback,
+                           multi_DataCallback data_callback)
+{
+    g_data_callback = data_callback;
+
     REG_RCNT = R_MULTI;
     REG_SIOCNT = SIO_MULTI;
     REG_SIOCNT |= SIO_IRQ | SIO_115200;
 
-    irq_add(II_SERIAL, multi_connect_serial_isr);
+    multi_register_serial_isr(multi_connect_serial_isr);
+    multi_enable_serial_irq(1);
 
-    int connection_mask = 0;
+    connection_mask = 0;
 
     if (multiplayer_is_master()) {
         while (1) {
-            // Ok, so we're going to send out a ready integer constant, and see
-            // which devices ping back a ready response.
-            REG_SIOMLT_SEND = MULTI_DEVICE_READY;
-            REG_SIOCNT |= SIO_START;
-
-            // FIXME... busy wait for now. We should really be waiting on a
-            // timer interrupt. But I'm feeling lazy.
-            busy_wait(20000);
-
-            multi_connect_check_devices(&connection_mask, callback);
-
-            busy_wait(10000);
-
             // When the host determines that it's time to advance to an active
             // multiplayer session, it writes a start command, and returns.
             if (host_callback()) {
@@ -131,6 +137,18 @@ multi_Status multi_connect(multi_ConnectedCallback callback,
                 multi_serial_init();
 
                 return multi_Status_success;
+
+            } else {
+                // Ok, so we're going to send out a ready integer constant, and
+                // see which devices ping back a ready response.
+                REG_SIOMLT_SEND = MULTI_DEVICE_READY;
+                REG_SIOCNT |= SIO_START;
+
+                // FIXME... busy wait for now. We should really be waiting on a
+                // timer interrupt. But I'm feeling lazy.
+                busy_wait(20000);
+
+                multi_connect_check_devices(&connection_mask, callback);
             }
         }
     } else {
@@ -152,7 +170,6 @@ multi_Status multi_connect(multi_ConnectedCallback callback,
             } else {
                 multi_connect_check_devices(&connection_mask, callback);
             }
-
         }
     }
 
@@ -160,11 +177,59 @@ multi_Status multi_connect(multi_ConnectedCallback callback,
 }
 
 
+static void multi_master_timer_isr()
+{
+    multi_enable_timer2_irq(0);
+
+    REG_SIOCNT |= SIO_START;
+}
+
+
+static void multi_serial_master_init_timer()
+{
+    REG_TM2CNT_H = 0x00C1;
+    REG_TM2CNT_L = 65000;
+
+    multi_register_timer2_isr(multi_master_timer_isr);
+    multi_enable_timer2_irq(1);
+}
+
+
+static void multi_schedule_master_tx()
+{
+    multi_serial_master_init_timer();
+}
+
+
+static void multi_serial_isr()
+{
+    g_data_callback(REG_SIOMULTI0,
+                    REG_SIOMULTI1,
+                    REG_SIOMULTI2,
+                    REG_SIOMULTI3,
+                    &REG_SIOMLT_SEND);
+
+    if (multiplayer_is_master()) {
+        multi_schedule_master_tx();
+    }
+}
+
+
 static void multi_serial_init()
 {
     REG_SIOMLT_SEND = 0;
 
-    irq_add(II_SERIAL, NULL);
+    if (multiplayer_is_master()) {
+        // The master drives the whole transmission sequence. Up until this
+        // point, we've been cheating a bit, by using busy-waits to schedule
+        // transmissions. But we can't just sit around doing nothing while we
+        // wait for data, so we're going to use a carefully calibrated timer
+        // interrupt instead, to drive the transmissions.
+        multi_serial_master_init_timer();
+    }
+
+    multi_register_serial_isr(multi_serial_isr);
+    multi_enable_serial_irq(1);
 }
 
 
